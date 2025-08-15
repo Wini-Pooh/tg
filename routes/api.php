@@ -23,8 +23,6 @@ Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
 // Telegram Webhook для реальных пользователей
 Route::post('/telegram/webhook', [TelegramWebhookController::class, 'webhook']);
 
-// Telegram Webhook
-Route::post('/telegram/webhook', [TelegramWebhookController::class, 'handle']);
-
 // Mini App API Routes
 Route::post('/miniapp/auth', [MiniAppController::class, 'auth']);
+Route::get('/miniapp/auto-auth', [MiniAppController::class, 'autoAuth']);

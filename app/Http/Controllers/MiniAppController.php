@@ -13,25 +13,43 @@ class MiniAppController extends Controller
 {
     public function index(Request $request)
     {
-        // Проверяем, есть ли данные Telegram Web App
-        $initData = $request->header('X-Telegram-Init-Data') ?: $request->get('tgWebAppData');
+        // Получаем данные Telegram Web App различными способами
+        $initData = $request->header('X-Telegram-Init-Data') ?: 
+                   $request->get('tgWebAppData') ?: 
+                   $request->get('_auth');
         
+        Log::info('Mini App accessed', [
+            'has_init_data' => !empty($initData),
+            'auth_user' => Auth::check() ? Auth::user()->telegram_id : null
+        ]);
+
+        // Если есть данные Telegram Web App, обрабатываем их
         if ($initData) {
-            Log::info('Mini App accessed with init data', ['init_data' => $initData]);
-            
-            if ($this->verifyTelegramWebAppData($initData)) {
-                $userData = $this->parseTelegramWebAppData($initData);
-                
-                if ($userData) {
-                    $user = $this->createOrUpdateUser($userData);
-                    Auth::login($user);
+            try {
+                if ($this->verifyTelegramWebAppData($initData)) {
+                    $userData = $this->parseTelegramWebAppData($initData);
                     
-                    Log::info('User auto-logged via Mini App', ['user_id' => $user->id]);
+                    if ($userData) {
+                        $user = $this->createOrUpdateUser($userData);
+                        Auth::login($user, true); // Запомнить пользователя
+                        
+                        Log::info('User auto-logged via Mini App', [
+                            'user_id' => $user->id,
+                            'telegram_id' => $user->telegram_id
+                        ]);
+                    }
+                } else {
+                    Log::warning('Invalid Telegram Web App data received');
                 }
+            } catch (\Exception $e) {
+                Log::error('Error processing Telegram Web App data', [
+                    'error' => $e->getMessage(),
+                    'trace' => $e->getTraceAsString()
+                ]);
             }
         }
 
-        return view('miniapp.index', [
+        return view('miniapp.app', [
             'user' => Auth::user(),
             'initData' => $initData
         ]);
@@ -41,12 +59,22 @@ class MiniAppController extends Controller
     {
         $botToken = config('services.telegram.bot_token');
         
+        if (!$botToken) {
+            Log::error('Bot token not configured');
+            return false;
+        }
+
         // Парсим данные
         parse_str($initData, $data);
         $checkHash = $data['hash'] ?? '';
         unset($data['hash']);
 
-        // Создаем строку для проверки
+        if (empty($checkHash)) {
+            Log::warning('No hash provided in Web App data');
+            return false;
+        }
+
+        // Создаем строку для проверки согласно документации Telegram
         $dataCheckArray = [];
         foreach ($data as $key => $value) {
             if ($value !== '' && $value !== null) {
@@ -62,12 +90,15 @@ class MiniAppController extends Controller
 
         $isValid = hash_equals($hash, $checkHash);
         
-        Log::info('Web App data verification', [
-            'is_valid' => $isValid,
-            'data_check_string' => $dataCheckString,
-            'expected_hash' => $hash,
-            'received_hash' => $checkHash
-        ]);
+        if (!$isValid) {
+            Log::warning('Web App data verification failed', [
+                'data_check_string' => $dataCheckString,
+                'expected_hash' => $hash,
+                'received_hash' => $checkHash
+            ]);
+        } else {
+            Log::info('Web App data verified successfully');
+        }
 
         return $isValid;
     }
@@ -126,7 +157,7 @@ class MiniAppController extends Controller
             
             if ($userData) {
                 $user = $this->createOrUpdateUser($userData);
-                Auth::login($user);
+                Auth::login($user, true);
                 
                 return response()->json([
                     'success' => true,
@@ -142,5 +173,25 @@ class MiniAppController extends Controller
         }
 
         return response()->json(['error' => 'Invalid data'], 400);
+    }
+
+    /**
+     * Автоматическая авторизация для пользователей без initData
+     */
+    public function autoAuth(Request $request)
+    {
+        // Если пользователь уже авторизован
+        if (Auth::check()) {
+            return response()->json([
+                'success' => true,
+                'user' => [
+                    'id' => Auth::user()->id,
+                    'name' => Auth::user()->name,
+                    'telegram_id' => Auth::user()->telegram_id,
+                ]
+            ]);
+        }
+
+        return response()->json(['error' => 'No authentication data available'], 401);
     }
 }

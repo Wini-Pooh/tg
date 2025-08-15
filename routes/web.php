@@ -18,19 +18,19 @@ use App\Http\Controllers\MiniAppController;
 */
 
 Route::get('/', function () {
-    if (Auth::check()) {
-        return redirect()->route('miniapp');
-    }
-    return view('welcome');
+    // Всегда перенаправляем на Mini App - авторизация произойдет автоматически
+    return redirect()->route('miniapp');
 });
 
-// Telegram Authentication Routes
-Route::get('/login', [TelegramAuthController::class, 'login'])->name('login');
-Route::get('/login/test', function() { return view('auth.telegram-test'); })->name('login.test');
+// Mini App Routes - главная точка входа
+Route::get('/miniapp', [MiniAppController::class, 'index'])->name('miniapp');
+
+// Дополнительные маршруты (оставляем для совместимости, но скрываем)
+Route::get('/login', function() {
+    return redirect()->route('miniapp');
+})->name('login');
+
 Route::get('/auth/telegram/callback', [TelegramAuthController::class, 'callback'])->name('telegram.callback');
 Route::post('/logout', [TelegramAuthController::class, 'logout'])->name('logout');
-
-// Mini App Routes
-Route::get('/miniapp', [MiniAppController::class, 'index'])->name('miniapp');
 
 Route::get('/home', [HomeController::class, 'index'])->name('home')->middleware('auth');
