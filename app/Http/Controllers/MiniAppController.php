@@ -18,17 +18,72 @@ class MiniAppController extends Controller
                    $request->get('tgWebAppData') ?: 
                    $request->get('_auth');
         
+        // Проверяем User-Agent для определения источника запроса
+        $userAgent = $request->header('User-Agent', '');
+        $isTelegramBot = strpos($userAgent, 'TelegramBot') !== false;
+        $isTelegramWebApp = strpos($userAgent, 'Telegram') !== false;
+        
+        // Проверяем Referer - если запрос идет из Telegram Web App
+        $referer = $request->header('Referer', '');
+        $isFromTelegramReferer = strpos($referer, 'web.telegram.org') !== false || 
+                                strpos($referer, 'telegram.org') !== false;
+        
+        // Проверяем sec-fetch-site заголовок
+        $secFetchSite = $request->header('sec-fetch-site', '');
+        $isFromTelegramApp = $secFetchSite === 'cross-site' && ($isTelegramWebApp || $isFromTelegramReferer);
+        
+        // Проверяем дополнительные заголовки характерные для Telegram
+        $hasWebAppHeaders = $request->hasHeader('X-Telegram-Init-Data') || 
+                           strpos($userAgent, 'webview') !== false ||
+                           strpos($userAgent, 'wv') !== false;
+        
+        // Определяем, что это запрос из Telegram Web App (более мягкие условия)
+        $isFromTelegram = !empty($initData) || 
+                         $isTelegramWebApp || 
+                         $isFromTelegramReferer || 
+                         $isFromTelegramApp || 
+                         $isTelegramBot ||
+                         $hasWebAppHeaders ||
+                         // Если есть специфичные для Telegram заголовки
+                         $secFetchSite === 'cross-site';
+        
         Log::info('Mini App accessed', [
             'has_init_data' => !empty($initData),
-            'auth_user' => Auth::check() ? Auth::user()->telegram_id : null
+            'auth_user' => Auth::check() ? Auth::user()->telegram_id : null,
+            'user_agent' => $userAgent,
+            'is_telegram_bot' => $isTelegramBot,
+            'is_telegram_webapp' => $isTelegramWebApp,
+            'is_from_telegram_referer' => $isFromTelegramReferer,
+            'is_from_telegram_app' => $isFromTelegramApp,
+            'has_webapp_headers' => $hasWebAppHeaders,
+            'is_from_telegram' => $isFromTelegram,
+            'referer' => $referer,
+            'sec_fetch_site' => $secFetchSite,
+            'request_query' => $request->query->all()
         ]);
 
-        // Если пользователь уже авторизован, не обрабатываем initData повторно
+        // Если пользователь уже авторизован, показываем приложение
         if (Auth::check()) {
-            Log::info('User already authenticated, skipping initData processing');
-            return view('miniapp.app', [
+            Log::info('User already authenticated, showing app');
+            return view('miniapp.app-new', [
                 'user' => Auth::user(),
-                'initData' => $initData
+                'initData' => $initData,
+                'isFromTelegram' => $isFromTelegram
+            ]);
+        }
+
+        // Только если очевидно что это обычный браузер, показываем инструкцию
+        $isRegularBrowser = $secFetchSite === 'none' && 
+                           !$isTelegramBot && 
+                           !$isTelegramWebApp && 
+                           !$hasWebAppHeaders &&
+                           empty($initData);
+        
+        if ($isRegularBrowser) {
+            Log::info('Regular browser detected, showing instruction');
+            return view('miniapp.telegram-instruction', [
+                'botUsername' => config('services.telegram.bot_username'),
+                'appUrl' => config('app.url')
             ]);
         }
 
@@ -58,9 +113,10 @@ class MiniAppController extends Controller
             }
         }
 
-        return view('miniapp.app', [
+        return view('miniapp.app-new', [
             'user' => Auth::user(),
-            'initData' => $initData
+            'initData' => $initData,
+            'isFromTelegram' => $isFromTelegram
         ]);
     }
 

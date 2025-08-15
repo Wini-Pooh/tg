@@ -4,6 +4,12 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="csrf-token" content="{{ csrf_token() }}">
+    @if($initData)
+    <meta name="has-init-data" content="true">
+    @endif
+    @if(isset($isFromTelegram))
+    <meta name="is-from-telegram" content="{{ $isFromTelegram ? 'true' : 'false' }}">
+    @endif
 
     <title>{{ config('app.name', 'Laravel') }} - Mini App</title>
 
@@ -235,6 +241,29 @@
         // Настройка темы и интерфейса
         tg.ready();
         tg.expand();
+
+        // Проверяем, нужно ли перезагрузить страницу с initData в заголовке
+        function checkInitDataReload() {
+            if (tg.initData && !document.querySelector('meta[name="has-init-data"]')) {
+                // Создаем мета-тег, чтобы избежать повторной перезагрузки
+                const meta = document.createElement('meta');
+                meta.name = 'has-init-data';
+                meta.content = 'true';
+                document.head.appendChild(meta);
+
+                // Перезагружаем страницу с initData в URL параметрах
+                const url = new URL(window.location);
+                url.searchParams.set('tgWebAppData', tg.initData);
+                window.location.href = url.toString();
+                return true;
+            }
+            return false;
+        }
+
+        // Если нужна перезагрузка, выходим
+        if (checkInitDataReload()) {
+            return;
+        }
         
         // Применение темы Telegram
         if (tg.themeParams) {
@@ -256,6 +285,19 @@
             
             authInProgress = true;
             
+            // Диагностика состояния Telegram Web App
+            console.log('=== Telegram Web App Diagnostic ===');
+            console.log('Platform:', tg.platform);
+            console.log('Version:', tg.version);
+            console.log('initData exists:', !!tg.initData);
+            console.log('initData length:', tg.initData ? tg.initData.length : 0);
+            console.log('User Agent:', navigator.userAgent);
+            console.log('Is from Telegram:', document.querySelector('meta[name="is-from-telegram"]')?.content);
+            
+            if (tg.initData) {
+                console.log('initData (first 100 chars):', tg.initData.substring(0, 100) + '...');
+            }
+            
             try {
                 // Сначала проверяем, есть ли уже авторизованный пользователь
                 @if(Auth::check())
@@ -273,9 +315,11 @@
                 @endif
 
                 console.log('Attempting client-side authentication...');
+                console.log('initData available:', !!tg.initData);
                 
                 // Если пользователь не авторизован, пытаемся авторизовать через Telegram Web App
                 if (tg.initData) {
+                    console.log('Sending auth request with initData...');
                     const response = await fetch('/api/miniapp/auth', {
                         method: 'POST',
                         headers: {
@@ -288,6 +332,7 @@
                     });
 
                     const result = await response.json();
+                    console.log('Auth API response:', result);
                     
                     if (result.success) {
                         currentUser = result.user;
@@ -300,6 +345,7 @@
                         throw new Error(result.error || 'Ошибка авторизации');
                     }
                 } else {
+                    console.log('No initData available, showing error');
                     throw new Error('Данные Telegram Web App недоступны');
                 }
             } catch (error) {
@@ -345,13 +391,27 @@
         function updateDebugInfo() {
             if (document.getElementById('tg-debug')) {
                 document.getElementById('tg-debug').textContent = JSON.stringify({
-                    initData: tg.initData,
+                    initData: tg.initData ? tg.initData.substring(0, 200) + '...' : null,
                     user: tg.initDataUnsafe?.user,
                     themeParams: tg.themeParams,
                     version: tg.version,
-                    platform: tg.platform
+                    platform: tg.platform,
+                    userAgent: navigator.userAgent,
+                    isFromTelegram: document.querySelector('meta[name="is-from-telegram"]')?.content,
+                    hasInitData: !!tg.initData,
+                    timestamp: new Date().toISOString()
                 }, null, 2);
             }
+            
+            if (document.getElementById('auth-status')) {
+                document.getElementById('auth-status').innerHTML = `
+                    <strong>Статус:</strong> ${currentUser ? 'Авторизован' : 'Не авторизован'}<br>
+                    <strong>Telegram Data:</strong> ${tg.initData ? 'Есть' : 'Отсутствует'}<br>
+                    <strong>Platform:</strong> ${tg.platform}<br>
+                    <strong>Version:</strong> ${tg.version}
+                `;
+            }
+        }
             
             if (document.getElementById('auth-status')) {
                 document.getElementById('auth-status').textContent = currentUser 
