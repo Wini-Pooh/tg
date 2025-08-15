@@ -1,7 +1,18 @@
 # PowerShell скрипт настройки Telegram бота для РЕАЛЬНЫХ пользователей
 # Версия для Windows
 
-Write-Host "🤖 Настройка Telegram Bot для РЕАЛЬНЫХ пользователей..." -ForegroundColor Cyan
+Write-Host "🤖 Настройка Te# 5. Настраиваем кнопку меню Mini App
+Write-Host "🔧 Настройка кнопки Mini App..."
+$menuData = @{
+    menu_button = @{
+        type = "web_app"
+        text = "🚀 Открыть App"
+        web_app = @{
+            url = "$MINIAPP_URL"
+        }
+    }
+} | ConvertTo-Json -Depth 3
+Invoke-TelegramRequest -Method "setChatMenuButton" -Data $menuDataля РЕАЛЬНЫХ пользователей..." -ForegroundColor Cyan
 Write-Host "=======================================================" -ForegroundColor Cyan
 
 # Проверяем наличие .env файла

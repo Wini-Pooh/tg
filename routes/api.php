@@ -3,6 +3,7 @@
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\TelegramWebhookController;
+use App\Http\Controllers\MiniAppController;
 
 /*
 |--------------------------------------------------------------------------
@@ -24,3 +25,6 @@ Route::post('/telegram/webhook', [TelegramWebhookController::class, 'webhook']);
 
 // Telegram Webhook
 Route::post('/telegram/webhook', [TelegramWebhookController::class, 'handle']);
+
+// Mini App API Routes
+Route::post('/miniapp/auth', [MiniAppController::class, 'auth']);

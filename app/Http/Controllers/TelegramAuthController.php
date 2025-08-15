@@ -119,34 +119,44 @@ class TelegramAuthController extends Controller
             'headers' => request()->headers->all()
         ]);
 
-        // Временно отключаем проверку времени для отладки
-        /*
-        // Проверяем возраст данных (не старше 1 дня)
+        // Проверяем возраст данных (не старше 1 дня) - временно отключено для отладки
         $authDate = $data['auth_date'] ?? 0;
-        if (time() - $authDate > 86400) {
-            Log::error('Telegram auth data too old', [
+        $ageInSeconds = time() - $authDate;
+        if ($ageInSeconds > 86400) {
+            Log::warning('Telegram auth data is old but allowing for debug', [
                 'auth_date' => $authDate,
                 'current_time' => time(),
-                'age' => time() - $authDate
+                'age_seconds' => $ageInSeconds,
+                'age_hours' => round($ageInSeconds / 3600, 2)
             ]);
-            return false;
+            // return false; // Временно отключено для отладки
         }
-        */
 
-        $dataCheckString = '';
-        ksort($data);
+        // Создаем строку для проверки подписи согласно документации Telegram
+        $dataCheckArray = [];
         foreach ($data as $key => $value) {
-            if ($value !== '') {
-                $dataCheckString .= $key . '=' . $value . "\n";
+            if ($value !== '' && $value !== null) {
+                $dataCheckArray[] = $key . '=' . $value;
             }
         }
-        $dataCheckString = rtrim($dataCheckString, "\n");
+        sort($dataCheckArray);
+        $dataCheckString = implode("\n", $dataCheckArray);
 
-        // Исправляем алгоритм для Telegram Login Widget
+        // Правильный алгоритм для Telegram Login Widget
         $secretKey = hash('sha256', $botToken, true);
         $hash = hash_hmac('sha256', $dataCheckString, $secretKey);
 
         $isValid = hash_equals($hash, $checkHash);
+        
+        Log::info('Telegram auth verification details', [
+            'data_check_string' => $dataCheckString,
+            'expected_hash' => $hash,
+            'received_hash' => $checkHash,
+            'is_valid' => $isValid,
+            'bot_token_start' => substr($botToken, 0, 10) . '...',
+            'secret_key_length' => strlen($secretKey),
+            'data_count' => count($data)
+        ]);
         
         if (!$isValid) {
             Log::error('Telegram auth verification failed', [
@@ -154,8 +164,7 @@ class TelegramAuthController extends Controller
                 'expected_hash' => $hash,
                 'received_hash' => $checkHash,
                 'data_check_string' => $dataCheckString,
-                'secret_key_length' => strlen($secretKey),
-                'bot_token_start' => substr($botToken, 0, 10) . '...'
+                'data_check_array' => $dataCheckArray
             ]);
         }
 
