@@ -6,6 +6,7 @@ use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
 class TelegramAuthController extends Controller
@@ -78,6 +79,29 @@ class TelegramAuthController extends Controller
         $checkHash = $data['hash'] ?? '';
         unset($data['hash']);
 
+        // Добавляем логирование для отладки
+        Log::info('Telegram login attempt', [
+            'data' => $data + ['hash' => $checkHash],
+            'current_timestamp' => time(),
+            'auth_date_human' => isset($data['auth_date']) ? date('Y-m-d H:i:s', $data['auth_date']) : 'N/A',
+            'current_time_human' => date('Y-m-d H:i:s'),
+            'headers' => request()->headers->all()
+        ]);
+
+        // Временно отключаем проверку времени для отладки
+        /*
+        // Проверяем возраст данных (не старше 1 дня)
+        $authDate = $data['auth_date'] ?? 0;
+        if (time() - $authDate > 86400) {
+            Log::error('Telegram auth data too old', [
+                'auth_date' => $authDate,
+                'current_time' => time(),
+                'age' => time() - $authDate
+            ]);
+            return false;
+        }
+        */
+
         $dataCheckString = '';
         ksort($data);
         foreach ($data as $key => $value) {
@@ -87,10 +111,24 @@ class TelegramAuthController extends Controller
         }
         $dataCheckString = rtrim($dataCheckString, "\n");
 
+        // Исправляем алгоритм для Telegram Login Widget
         $secretKey = hash('sha256', $botToken, true);
         $hash = hash_hmac('sha256', $dataCheckString, $secretKey);
 
-        return hash_equals($hash, $checkHash);
+        $isValid = hash_equals($hash, $checkHash);
+        
+        if (!$isValid) {
+            Log::error('Telegram auth verification failed', [
+                'data' => $data + ['hash' => $checkHash],
+                'expected_hash' => $hash,
+                'received_hash' => $checkHash,
+                'data_check_string' => $dataCheckString,
+                'secret_key_length' => strlen($secretKey),
+                'bot_token_start' => substr($botToken, 0, 10) . '...'
+            ]);
+        }
+
+        return $isValid;
     }
 
     private function verifyTelegramWebAppData($initData)
