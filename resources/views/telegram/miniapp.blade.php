@@ -237,8 +237,29 @@
                     platform: tg.platform
                 });
                 
-                if (!tg.initData) {
-                    throw new Error('Данные инициализации от Telegram недоступны. Убедитесь, что приложение открыто через Telegram.');
+                // Для локальной разработки используем тестовые данные
+                let authData = {};
+                
+                if (!tg.initData && window.location.hostname === 'localhost') {
+                    // Тестовые данные для локальной разработки
+                    authData = {
+                        initData: 'test_data',
+                        user: {
+                            id: 123456789,
+                            first_name: 'Test',
+                            last_name: 'User',
+                            username: 'testuser',
+                            language_code: 'ru'
+                        }
+                    };
+                    console.log('Используем тестовые данные для локальной разработки');
+                } else if (tg.initData) {
+                    authData = {
+                        initData: tg.initData,
+                        user: tg.initDataUnsafe?.user || null
+                    };
+                } else {
+                    throw new Error('Отсутствуют данные инициализации');
                 }
                 
                 const response = await fetch('/telegram/miniapp/auth', {
@@ -247,19 +268,24 @@
                         'Content-Type': 'application/json',
                         'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
                     },
-                    body: JSON.stringify({
-                        initData: tg.initData,
-                        user: tg.initDataUnsafe?.user || null
-                    })
+                    body: JSON.stringify(authData)
                 });
                 
+                const responseText = await response.text();
+                console.log('Response text:', responseText);
+                
                 if (!response.ok) {
-                    const errorText = await response.text();
-                    console.error('HTTP Error:', response.status, errorText);
-                    throw new Error(`HTTP ${response.status}: ${errorText}`);
+                    console.error('HTTP Error:', response.status, responseText);
+                    throw new Error(`HTTP ${response.status}: ${responseText}`);
                 }
                 
-                const result = await response.json();
+                let result;
+                try {
+                    result = JSON.parse(responseText);
+                } catch (parseError) {
+                    console.error('JSON parse error:', parseError);
+                    throw new Error('Ошибка обработки ответа сервера');
+                }
                 
                 if (result.success) {
                     // Перезагружаем страницу после успешной авторизации
@@ -270,10 +296,10 @@
             } catch (error) {
                 console.error('Ошибка авторизации:', error);
                 
-                // Используем более совместимый способ показа сообщений
-                if (tg.showAlert) {
+                // Показываем сообщение об ошибке
+                if (window.Telegram && window.Telegram.WebApp && typeof window.Telegram.WebApp.showAlert === 'function') {
                     try {
-                        tg.showAlert('Ошибка авторизации: ' + error.message);
+                        window.Telegram.WebApp.showAlert('Ошибка авторизации: ' + error.message);
                     } catch (alertError) {
                         console.error('Ошибка показа alert:', alertError);
                         alert('Ошибка авторизации: ' + error.message);

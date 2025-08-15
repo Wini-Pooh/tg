@@ -60,8 +60,23 @@ class TelegramMiniAppController extends Controller
             
             if ($userData) {
                 $parsedUserData = $userData;
+                Log::info('Using provided user data', ['userData' => $userData]);
             } else {
                 $parsedUserData = $this->parseInitData($initData);
+                Log::info('Parsed init data', ['parsedUserData' => $parsedUserData]);
+            }
+            
+            // Если данные все еще пустые, используем тестовые данные для localhost
+            if (!$parsedUserData && $initData === 'test_data') {
+                $parsedUserData = [
+                    'id' => 123456789,
+                    'first_name' => 'Test',
+                    'last_name' => 'User',
+                    'username' => 'testuser',
+                    'photo_url' => null,
+                    'language_code' => 'ru'
+                ];
+                Log::info('Using test user data for localhost');
             }
             
             if (!$parsedUserData) {

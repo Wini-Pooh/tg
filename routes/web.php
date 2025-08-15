@@ -5,6 +5,7 @@ use Illuminate\Support\Facades\Auth;
 use App\Http\Controllers\TelegramAuthController;
 use App\Http\Controllers\TelegramMiniAppController;
 use App\Http\Controllers\TelegramWebhookController;
+use App\Http\Controllers\HomeController;
 
 /*
 |--------------------------------------------------------------------------
@@ -42,4 +43,4 @@ Route::post('/logout', function () {
     return redirect('/');
 })->name('logout');
 
-Route::get('/home', [App\Http\Controllers\HomeController::class, 'index'])->name('home')->middleware('auth');
+Route::get('/home', [HomeController::class, 'index'])->name('home')->middleware('auth');

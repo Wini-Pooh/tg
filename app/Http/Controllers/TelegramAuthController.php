@@ -6,6 +6,7 @@ use Illuminate\Http\Request;
 use App\Models\User;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
 class TelegramAuthController extends Controller
@@ -14,8 +15,14 @@ class TelegramAuthController extends Controller
     {
         $telegramData = $request->all();
         
+        Log::info('Telegram login attempt', [
+            'data' => $telegramData,
+            'headers' => $request->headers->all()
+        ]);
+        
         // Проверяем подлинность данных от Telegram
         if (!$this->verifyTelegramAuth($telegramData)) {
+            Log::error('Telegram auth verification failed', ['data' => $telegramData]);
             return redirect()->route('login')->with('error', 'Неверные данные авторизации Telegram');
         }
         
@@ -70,6 +77,8 @@ class TelegramAuthController extends Controller
    
     private function processAuth($telegramData)
     {
+        Log::info('Processing auth for user', ['telegram_data' => $telegramData]);
+        
         // Ищем пользователя по telegram_id
         $user = User::where('telegram_id', $telegramData['id'])->first();
         
@@ -84,6 +93,8 @@ class TelegramAuthController extends Controller
                 'password' => Hash::make(Str::random(16)), // Случайный пароль
                 'email_verified_at' => now(),
             ]);
+            
+            Log::info('Created new user', ['user_id' => $user->id, 'telegram_id' => $user->telegram_id]);
         } else {
             // Обновляем информацию о пользователе
             $user->update([
@@ -91,10 +102,14 @@ class TelegramAuthController extends Controller
                 'telegram_username' => $telegramData['username'] ?? null,
                 'telegram_photo_url' => $telegramData['photo_url'] ?? null,
             ]);
+            
+            Log::info('Updated existing user', ['user_id' => $user->id, 'telegram_id' => $user->telegram_id]);
         }
         
         // Авторизуем пользователя
         Auth::login($user, true);
+        
+        Log::info('User logged in successfully', ['user_id' => $user->id]);
         
         return redirect()->intended('/home');
     }
