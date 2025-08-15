@@ -2,10 +2,8 @@
 
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Auth;
-use App\Http\Controllers\TelegramAuthController;
-use App\Http\Controllers\TelegramMiniAppController;
-use App\Http\Controllers\TelegramWebhookController;
 use App\Http\Controllers\HomeController;
+use App\Http\Controllers\TelegramAuthController;
 
 /*
 |--------------------------------------------------------------------------
@@ -19,28 +17,18 @@ use App\Http\Controllers\HomeController;
 */
 
 Route::get('/', function () {
+    if (Auth::check()) {
+        return redirect()->route('miniapp');
+    }
     return view('welcome');
 });
 
 // Telegram Authentication Routes
-Route::get('/login', function () {
-    return view('auth.telegram-login');
-})->name('login');
+Route::get('/login', [TelegramAuthController::class, 'login'])->name('login');
+Route::get('/auth/telegram/callback', [TelegramAuthController::class, 'callback'])->name('telegram.callback');
+Route::post('/logout', [TelegramAuthController::class, 'logout'])->name('logout');
 
-Route::get('/telegram/login', [TelegramAuthController::class, 'login'])->name('telegram.login');
-Route::get('/telegram/auth-redirect', [TelegramAuthController::class, 'authRedirect'])->name('telegram.auth.redirect');
-Route::post('/telegram/dev-login', [TelegramAuthController::class, 'devLogin'])->name('telegram.dev.login');
-
-// Telegram Mini App Routes
-Route::get('/telegram/miniapp', [TelegramMiniAppController::class, 'index'])->name('telegram.miniapp');
-Route::post('/telegram/miniapp/auth', [TelegramMiniAppController::class, 'auth'])->name('telegram.miniapp.auth');
-
-// Telegram Webhook Route
-Route::post('/telegram/webhook', [TelegramWebhookController::class, 'handle'])->name('telegram.webhook');
-
-Route::post('/logout', function () {
-    Auth::logout();
-    return redirect('/');
-})->name('logout');
+// Mini App Route
+Route::get('/miniapp', [TelegramAuthController::class, 'miniapp'])->name('miniapp')->middleware('auth');
 
 Route::get('/home', [HomeController::class, 'index'])->name('home')->middleware('auth');

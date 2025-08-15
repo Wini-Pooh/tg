@@ -2,140 +2,132 @@
 
 namespace App\Http\Controllers;
 
-use Illuminate\Http\Request;
 use App\Models\User;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
 class TelegramAuthController extends Controller
 {
     public function login(Request $request)
     {
+        return view('auth.telegram-login');
+    }
+
+    public function callback(Request $request)
+    {
+        // Проверяем данные от Telegram
+        if (!$this->verifyTelegramAuth($request->all())) {
+            return redirect()->route('login')->withErrors(['error' => 'Неверные данные авторизации']);
+        }
+
         $telegramData = $request->all();
         
-        Log::info('Telegram login attempt', [
-            'data' => $telegramData,
-            'headers' => $request->headers->all()
-        ]);
-        
-        // Проверяем подлинность данных от Telegram
-        if (!$this->verifyTelegramAuth($telegramData)) {
-            Log::error('Telegram auth verification failed', ['data' => $telegramData]);
-            return redirect()->route('login')->with('error', 'Неверные данные авторизации Telegram');
-        }
-        
-        return $this->processAuth($telegramData);
-    }
-    
-    public function devLogin(Request $request)
-    {
-        // Только для разработки
-        if (config('app.env') !== 'local') {
-            abort(404);
-        }
-        
-        $request->validate([
-            'telegram_id' => 'required|numeric',
-            'first_name' => 'required|string|max:255',
-            'username' => 'nullable|string|max:255',
-        ]);
-        
-        $telegramData = [
-            'id' => $request->telegram_id,
-            'first_name' => $request->first_name,
-            'last_name' => '',
-            'username' => $request->username,
-            'photo_url' => null,
-        ];
-        
-        return $this->processAuth($telegramData);
-    }
-    
-    public function authRedirect(Request $request)
-    {
-        $token = $request->get('token');
-        
-        if (!$token) {
-            return redirect()->route('login')->with('error', 'Неверная ссылка авторизации');
-        }
-        
-        // Получаем данные пользователя из кеша
-        $userData = cache()->get("telegram_auth:{$token}");
-        
-        if (!$userData) {
-            return redirect()->route('login')->with('error', 'Ссылка авторизации истекла или недействительна');
-        }
-        
-        // Удаляем токен из кеша (одноразовое использование)
-        cache()->forget("telegram_auth:{$token}");
-        
-        // Обрабатываем авторизацию
-        return $this->processAuth($userData);
-    }
-   
-    private function processAuth($telegramData)
-    {
-        Log::info('Processing auth for user', ['telegram_data' => $telegramData]);
-        
-        // Ищем пользователя по telegram_id
+        // Ищем или создаем пользователя
         $user = User::where('telegram_id', $telegramData['id'])->first();
         
         if (!$user) {
-            // Создаем нового пользователя
             $user = User::create([
                 'name' => $telegramData['first_name'] . ' ' . ($telegramData['last_name'] ?? ''),
-                'email' => $telegramData['id'] . '@telegram.user', // Фиктивный email
+                'email' => 'telegram_' . $telegramData['id'] . '@example.com',
+                'password' => Hash::make(Str::random(32)),
                 'telegram_id' => $telegramData['id'],
                 'telegram_username' => $telegramData['username'] ?? null,
                 'telegram_photo_url' => $telegramData['photo_url'] ?? null,
-                'password' => Hash::make(Str::random(16)), // Случайный пароль
-                'email_verified_at' => now(),
             ]);
-            
-            Log::info('Created new user', ['user_id' => $user->id, 'telegram_id' => $user->telegram_id]);
         } else {
-            // Обновляем информацию о пользователе
+            // Обновляем данные пользователя
             $user->update([
                 'name' => $telegramData['first_name'] . ' ' . ($telegramData['last_name'] ?? ''),
                 'telegram_username' => $telegramData['username'] ?? null,
                 'telegram_photo_url' => $telegramData['photo_url'] ?? null,
             ]);
-            
-            Log::info('Updated existing user', ['user_id' => $user->id, 'telegram_id' => $user->telegram_id]);
         }
-        
-        // Авторизуем пользователя
-        Auth::login($user, true);
-        
-        Log::info('User logged in successfully', ['user_id' => $user->id]);
-        
-        return redirect()->intended('/home');
+
+        Auth::login($user);
+
+        return redirect()->route('miniapp');
     }
-   
-    
+
+    public function miniapp(Request $request)
+    {
+        // Проверяем авторизацию через Telegram Web App
+        if ($request->has('tgWebAppData')) {
+            $initData = $request->get('tgWebAppData');
+            if ($this->verifyTelegramWebAppData($initData)) {
+                // Парсим данные пользователя из initData
+                $userData = $this->parseTelegramWebAppData($initData);
+                
+                if ($userData) {
+                    $user = User::where('telegram_id', $userData['id'])->first();
+                    
+                    if ($user) {
+                        Auth::login($user);
+                    }
+                }
+            }
+        }
+
+        return view('miniapp.index');
+    }
+
     private function verifyTelegramAuth($data)
     {
         $botToken = config('services.telegram.bot_token');
-        
-        if (!$botToken) {
-            return false;
-        }
-        
         $checkHash = $data['hash'] ?? '';
         unset($data['hash']);
-        
-        $dataCheckArr = [];
+
+        $dataCheckString = '';
+        ksort($data);
         foreach ($data as $key => $value) {
-            $dataCheckArr[] = $key . '=' . $value;
+            if ($value !== '') {
+                $dataCheckString .= $key . '=' . $value . "\n";
+            }
         }
-        sort($dataCheckArr);
-        
-        $dataCheckString = implode("\n", $dataCheckArr);
+        $dataCheckString = rtrim($dataCheckString, "\n");
+
         $secretKey = hash('sha256', $botToken, true);
         $hash = hash_hmac('sha256', $dataCheckString, $secretKey);
-        
+
         return hash_equals($hash, $checkHash);
+    }
+
+    private function verifyTelegramWebAppData($initData)
+    {
+        $botToken = config('services.telegram.bot_token');
+        
+        parse_str($initData, $data);
+        $checkHash = $data['hash'] ?? '';
+        unset($data['hash']);
+
+        $dataCheckString = '';
+        ksort($data);
+        foreach ($data as $key => $value) {
+            $dataCheckString .= $key . '=' . $value . "\n";
+        }
+        $dataCheckString = rtrim($dataCheckString, "\n");
+
+        $secretKey = hash_hmac('sha256', 'WebAppData', $botToken, true);
+        $hash = hash_hmac('sha256', $dataCheckString, $secretKey);
+
+        return hash_equals($hash, $checkHash);
+    }
+
+    private function parseTelegramWebAppData($initData)
+    {
+        parse_str($initData, $data);
+        
+        if (isset($data['user'])) {
+            return json_decode($data['user'], true);
+        }
+        
+        return null;
+    }
+
+    public function logout()
+    {
+        Auth::logout();
+        return redirect('/');
     }
 }
