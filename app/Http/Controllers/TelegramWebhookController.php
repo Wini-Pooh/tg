@@ -25,11 +25,18 @@ class TelegramWebhookController extends Controller
         $chatId = $message['chat']['id'];
         $text = $message['text'] ?? '';
         
+        // Обработка команды /start с параметрами
+        if (strpos($text, '/start') === 0) {
+            $parts = explode(' ', $text);
+            if (count($parts) > 1 && $parts[1] === 'auth') {
+                $this->handleAuthRequest($chatId, $message);
+                return;
+            }
+            $this->sendWelcomeMessage($chatId);
+            return;
+        }
+        
         switch ($text) {
-            case '/start':
-                $this->sendWelcomeMessage($chatId);
-                break;
-                
             case '/app':
                 $this->sendMiniAppButton($chatId);
                 break;
@@ -166,5 +173,44 @@ class TelegramWebhookController extends Controller
                 'response' => $response
             ]);
         }
+    }
+    
+    private function handleAuthRequest($chatId, $message)
+    {
+        $user = $message['from'];
+        
+        // Создаем одноразовый токен для авторизации
+        $authToken = hash('sha256', $user['id'] . time() . config('app.key'));
+        
+        // Сохраняем данные пользователя в кеше на 5 минут
+        cache()->put("telegram_auth:{$authToken}", [
+            'id' => $user['id'],
+            'first_name' => $user['first_name'] ?? '',
+            'last_name' => $user['last_name'] ?? '',
+            'username' => $user['username'] ?? '',
+            'photo_url' => null, // Можно добавить получение фото позже
+        ], 300); // 5 минут
+        
+        $authUrl = config('app.url') . '/telegram/auth-redirect?token=' . $authToken;
+        
+        $keyboard = [
+            'inline_keyboard' => [
+                [
+                    [
+                        'text' => '🔐 Войти на сайт',
+                        'url' => $authUrl
+                    ]
+                ]
+            ]
+        ];
+        
+        $message = "🔐 *Авторизация на сайте*\n\n";
+        $message .= "Привет, {$user['first_name']}!\n\n";
+        $message .= "Нажмите кнопку ниже, чтобы войти на сайт:\n";
+        $message .= "• ✅ Безопасная авторизация\n";
+        $message .= "• ⏱️ Ссылка действует 5 минут\n";
+        $message .= "• 🛡️ Никаких паролей не требуется";
+        
+        $this->sendMessage($chatId, $message, $keyboard, 'Markdown');
     }
 }

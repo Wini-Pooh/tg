@@ -42,8 +42,8 @@
                     @endif
 
                     <!-- Официальный Telegram Login Widget (для продакшена) -->
-                    <div class="d-flex justify-content-center">
-                        <div id="telegram-login-widget">
+                    <div class="d-flex justify-content-center flex-column align-items-center">
+                        <div id="telegram-login-widget" class="mb-3">
                             @if(config('app.env') !== 'local')
                                 <script async src="https://telegram.org/js/telegram-widget.js?22" 
                                         data-telegram-login="{{ config('services.telegram.bot_username') }}" 
@@ -57,6 +57,18 @@
                                     Для тестирования используйте форму выше или настройте ngrok.
                                 </div>
                             @endif
+                        </div>
+                        
+                        <!-- Альтернативный способ входа -->
+                        <div class="text-center">
+                            <p class="text-muted mb-2">Проблемы с виджетом?</p>
+                            <a href="https://t.me/{{ config('services.telegram.bot_username') }}?start=auth" 
+                               class="btn btn-outline-primary" target="_blank">
+                                <i class="bi bi-telegram"></i> Войти через бота
+                            </a>
+                            <div class="small text-muted mt-2">
+                                Нажмите ссылку → Отправьте /start auth → Следуйте инструкциям
+                            </div>
                         </div>
                     </div>
 

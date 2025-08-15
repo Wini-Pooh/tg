@@ -27,6 +27,7 @@ Route::get('/login', function () {
 })->name('login');
 
 Route::get('/telegram/login', [TelegramAuthController::class, 'login'])->name('telegram.login');
+Route::get('/telegram/auth-redirect', [TelegramAuthController::class, 'authRedirect'])->name('telegram.auth.redirect');
 Route::post('/telegram/dev-login', [TelegramAuthController::class, 'devLogin'])->name('telegram.dev.login');
 
 // Telegram Mini App Routes

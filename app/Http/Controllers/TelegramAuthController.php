@@ -46,6 +46,27 @@ class TelegramAuthController extends Controller
         return $this->processAuth($telegramData);
     }
     
+    public function authRedirect(Request $request)
+    {
+        $token = $request->get('token');
+        
+        if (!$token) {
+            return redirect()->route('login')->with('error', 'Неверная ссылка авторизации');
+        }
+        
+        // Получаем данные пользователя из кеша
+        $userData = cache()->get("telegram_auth:{$token}");
+        
+        if (!$userData) {
+            return redirect()->route('login')->with('error', 'Ссылка авторизации истекла или недействительна');
+        }
+        
+        // Удаляем токен из кеша (одноразовое использование)
+        cache()->forget("telegram_auth:{$token}");
+        
+        // Обрабатываем авторизацию
+        return $this->processAuth($userData);
+    }
    
     private function processAuth($telegramData)
     {
