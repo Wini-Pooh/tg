@@ -18,37 +18,68 @@ class TelegramAuthController extends Controller
 
     public function callback(Request $request)
     {
-        // Проверяем данные от Telegram
-        if (!$this->verifyTelegramAuth($request->all())) {
-            return redirect()->route('login')->withErrors(['error' => 'Неверные данные авторизации']);
-        }
-
-        $telegramData = $request->all();
-        
-        // Ищем или создаем пользователя
-        $user = User::where('telegram_id', $telegramData['id'])->first();
-        
-        if (!$user) {
-            $user = User::create([
-                'name' => $telegramData['first_name'] . ' ' . ($telegramData['last_name'] ?? ''),
-                'email' => 'telegram_' . $telegramData['id'] . '@example.com',
-                'password' => Hash::make(Str::random(32)),
-                'telegram_id' => $telegramData['id'],
-                'telegram_username' => $telegramData['username'] ?? null,
-                'telegram_photo_url' => $telegramData['photo_url'] ?? null,
+        try {
+            // Логируем все входящие данные для отладки
+            Log::info('Telegram callback received', [
+                'request_data' => $request->all(),
+                'headers' => $request->headers->all(),
+                'query' => $request->query()
             ]);
-        } else {
-            // Обновляем данные пользователя
-            $user->update([
-                'name' => $telegramData['first_name'] . ' ' . ($telegramData['last_name'] ?? ''),
-                'telegram_username' => $telegramData['username'] ?? null,
-                'telegram_photo_url' => $telegramData['photo_url'] ?? null,
+
+            // Проверяем наличие обязательных полей
+            if (!$request->has(['id', 'hash', 'auth_date'])) {
+                Log::error('Missing required fields', ['data' => $request->all()]);
+                return redirect()->route('login')->withErrors(['Отсутствуют обязательные данные от Telegram']);
+            }
+
+            // Проверяем данные от Telegram
+            if (!$this->verifyTelegramAuth($request->all())) {
+                Log::error('Telegram auth verification failed', ['data' => $request->all()]);
+                return redirect()->route('login')->withErrors(['Не удалось проверить данные от Telegram']);
+            }
+
+            $telegramData = $request->all();
+            
+            // Ищем или создаем пользователя
+            $user = User::where('telegram_id', $telegramData['id'])->first();
+            
+            if (!$user) {
+                $user = User::create([
+                    'name' => trim(($telegramData['first_name'] ?? '') . ' ' . ($telegramData['last_name'] ?? '')),
+                    'email' => 'telegram_' . $telegramData['id'] . '@example.com',
+                    'password' => Hash::make(Str::random(32)),
+                    'telegram_id' => $telegramData['id'],
+                    'telegram_username' => $telegramData['username'] ?? null,
+                    'telegram_photo_url' => $telegramData['photo_url'] ?? null,
+                ]);
+                
+                Log::info('New user created', ['user_id' => $user->id, 'telegram_id' => $telegramData['id']]);
+            } else {
+                // Обновляем данные пользователя
+                $user->update([
+                    'name' => trim(($telegramData['first_name'] ?? '') . ' ' . ($telegramData['last_name'] ?? '')),
+                    'telegram_username' => $telegramData['username'] ?? null,
+                    'telegram_photo_url' => $telegramData['photo_url'] ?? null,
+                ]);
+                
+                Log::info('User updated', ['user_id' => $user->id, 'telegram_id' => $telegramData['id']]);
+            }
+
+            Auth::login($user);
+            
+            Log::info('User logged in successfully', ['user_id' => $user->id]);
+
+            return redirect()->route('miniapp')->with('success', 'Успешная авторизация через Telegram!');
+            
+        } catch (\Exception $e) {
+            Log::error('Telegram auth error', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'request_data' => $request->all()
             ]);
+            
+            return redirect()->route('login')->withErrors(['Произошла ошибка при авторизации: ' . $e->getMessage()]);
         }
-
-        Auth::login($user);
-
-        return redirect()->route('miniapp');
     }
 
     public function miniapp(Request $request)
