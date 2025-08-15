@@ -6,6 +6,7 @@ use Illuminate\Http\Request;
 use App\Models\User;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
 class TelegramMiniAppController extends Controller
@@ -37,34 +38,71 @@ class TelegramMiniAppController extends Controller
      */
     public function auth(Request $request)
     {
+        Log::info('Telegram Mini App auth request', [
+            'headers' => $request->headers->all(),
+            'input' => $request->all()
+        ]);
+        
         $initData = $request->input('initData');
+        $userData = $request->input('user'); // Добавляем объявление переменной
         
         if (!$initData) {
+            Log::error('Missing initData in auth request');
             return response()->json(['error' => 'Отсутствуют данные инициализации'], 400);
         }
         
-        if (!$this->verifyTelegramWebAppData($initData)) {
-            return response()->json(['error' => 'Неверные данные авторизации'], 401);
+        // Для разработки можем пропустить проверку подписи
+        if (config('app.env') === 'local') {
+            Log::info('Local environment - skipping signature verification');
+            
+            // Попробуем получить данные пользователя из разных источников
+            $parsedUserData = null;
+            
+            if ($userData) {
+                $parsedUserData = $userData;
+            } else {
+                $parsedUserData = $this->parseInitData($initData);
+            }
+            
+            if (!$parsedUserData) {
+                Log::error('Failed to parse user data', ['initData' => $initData, 'userData' => $userData]);
+                return response()->json(['error' => 'Не удалось получить данные пользователя'], 400);
+            }
+            
+        } else {
+            // В продакшене проверяем подпись
+            if (!$this->verifyTelegramWebAppData($initData)) {
+                Log::error('Invalid signature verification');
+                return response()->json(['error' => 'Неверные данные авторизации'], 401);
+            }
+            
+            $parsedUserData = $this->parseInitData($initData);
+            if (!$parsedUserData) {
+                Log::error('Failed to parse init data');
+                return response()->json(['error' => 'Не удалось распарсить данные пользователя'], 400);
+            }
         }
         
-        $userData = $this->parseInitData($initData);
-        if (!$userData) {
-            return response()->json(['error' => 'Не удалось распарсить данные пользователя'], 400);
+        try {
+            $user = $this->processAuth($parsedUserData);
+            Auth::login($user, true);
+            
+            Log::info('Successful authentication', ['user_id' => $user->id]);
+            
+            return response()->json([
+                'success' => true,
+                'user' => [
+                    'id' => $user->id,
+                    'name' => $user->name,
+                    'telegram_id' => $user->telegram_id,
+                    'telegram_username' => $user->telegram_username,
+                    'telegram_photo_url' => $user->telegram_photo_url,
+                ]
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Auth process failed', ['error' => $e->getMessage()]);
+            return response()->json(['error' => 'Ошибка обработки авторизации: ' . $e->getMessage()], 500);
         }
-        
-        $user = $this->processAuth($userData);
-        Auth::login($user, true);
-        
-        return response()->json([
-            'success' => true,
-            'user' => [
-                'id' => $user->id,
-                'name' => $user->name,
-                'telegram_id' => $user->telegram_id,
-                'telegram_username' => $user->telegram_username,
-                'telegram_photo_url' => $user->telegram_photo_url,
-            ]
-        ]);
     }
     
     /**

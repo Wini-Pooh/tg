@@ -228,6 +228,19 @@
             authButton.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Авторизация...';
             
             try {
+                // Проверяем доступность данных Telegram
+                console.log('Telegram Web App данные:', {
+                    initData: tg.initData,
+                    initDataUnsafe: tg.initDataUnsafe,
+                    user: tg.initDataUnsafe?.user,
+                    version: tg.version,
+                    platform: tg.platform
+                });
+                
+                if (!tg.initData) {
+                    throw new Error('Данные инициализации от Telegram недоступны. Убедитесь, что приложение открыто через Telegram.');
+                }
+                
                 const response = await fetch('/telegram/miniapp/auth', {
                     method: 'POST',
                     headers: {
@@ -235,9 +248,16 @@
                         'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
                     },
                     body: JSON.stringify({
-                        initData: tg.initData
+                        initData: tg.initData,
+                        user: tg.initDataUnsafe?.user || null
                     })
                 });
+                
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    console.error('HTTP Error:', response.status, errorText);
+                    throw new Error(`HTTP ${response.status}: ${errorText}`);
+                }
                 
                 const result = await response.json();
                 
@@ -249,7 +269,18 @@
                 }
             } catch (error) {
                 console.error('Ошибка авторизации:', error);
-                tg.showAlert('Ошибка авторизации: ' + error.message);
+                
+                // Используем более совместимый способ показа сообщений
+                if (tg.showAlert) {
+                    try {
+                        tg.showAlert('Ошибка авторизации: ' + error.message);
+                    } catch (alertError) {
+                        console.error('Ошибка показа alert:', alertError);
+                        alert('Ошибка авторизации: ' + error.message);
+                    }
+                } else {
+                    alert('Ошибка авторизации: ' + error.message);
+                }
                 
                 authButton.disabled = false;
                 authButton.innerHTML = '<i class="bi bi-shield-check me-2"></i>Авторизоваться';
