@@ -118,10 +118,9 @@ Invoke-TelegramRequest -Method "setWebhook" -Data $webhookData
 Write-Host "🔧 Настройка команд бота..."
 $commandsData = @{
     commands = @(
-        @{command = "start"; description = "🚀 Запустить приложение"},
-        @{command = "app"; description = "📱 Открыть Mini App"},
-        @{command = "login"; description = "🔐 Авторизация"},
-        @{command = "help"; description = "❓ Помощь"}
+        @{command = "start"; description = "🏠 Главное меню"},
+        @{command = "app"; description = "� Открыть приложение"},
+        @{command = "help"; description = "❓ Справка и помощь"}
     )
 } | ConvertTo-Json -Depth 3
 Invoke-TelegramRequest -Method "setMyCommands" -Data $commandsData
@@ -129,8 +128,8 @@ Invoke-TelegramRequest -Method "setMyCommands" -Data $commandsData
 # 4. Настраиваем описание бота
 Write-Host "🔧 Настройка описания бота..."
 $descriptionData = @{
-    description = "🤖 Официальный бот для доступа к приложению`n`n✨ Возможности:`n• 🔐 Безопасная авторизация через Telegram`n• 📱 Запуск Mini App`n• ⚡ Мгновенный доступ без паролей`n`n👤 Для реальных пользователей"
-    short_description = "Официальный бот приложения"
+    description = "🤖 Персональное приложение в Telegram`n`n✨ Особенности:`n• 🔐 Автоматическая авторизация`n• 📱 Работает как Mini App`n• ⚡ Мгновенный доступ`n• 🔄 Все данные синхронизируются автоматически`n`nПросто нажмите кнопку и начинайте пользоваться!"
+    short_description = "Персональное приложение в Telegram"
 } | ConvertTo-Json
 Invoke-TelegramRequest -Method "setMyDescription" -Data $descriptionData
 
@@ -139,7 +138,7 @@ Write-Host "🔧 Настройка кнопки Mini App..."
 $menuData = @{
     menu_button = @{
         type = "web_app"
-        text = "🚀 Открыть приложение"
+        text = "🚀 Мое приложение"
         web_app = @{
             url = $MINIAPP_URL
         }
@@ -179,21 +178,24 @@ Write-Host ""
 Write-Host "🎯 Инструкции для РЕАЛЬНЫХ пользователей:" -ForegroundColor Cyan
 Write-Host "=========================================="
 Write-Host ""
+Write-Host "🎯 Инструкции для пользователей:" -ForegroundColor Cyan
+Write-Host "==============================="
+Write-Host ""
 Write-Host "1️⃣ Найдите бота в Telegram:"
 Write-Host "   https://t.me/$BOT_USERNAME"
 Write-Host ""
 Write-Host "2️⃣ Отправьте команду /start"
 Write-Host ""
-Write-Host "3️⃣ Способы авторизации:"
-Write-Host "   а) Нажмите кнопку 'Открыть приложение' в меню бота"
-Write-Host "   б) Или перейдите на: $LOGIN_URL"
+Write-Host "3️⃣ Способы входа (все автоматические!):"
+Write-Host "   🅰️ Нажмите кнопку '🚀 Мое приложение' в меню бота"
+Write-Host "   🅱️ Используйте команду /app"
+Write-Host "   🅲️ Или откройте: $MINIAPP_URL"
 Write-Host ""
-Write-Host "4️⃣ Авторизуйтесь через Telegram Login Widget"
+Write-Host "4️⃣ Авторизация происходит АВТОМАТИЧЕСКИ - никаких паролей!"
 Write-Host ""
 Write-Host "🔗 Ссылки:" -ForegroundColor Yellow
 Write-Host "• Бот: https://t.me/$BOT_USERNAME"
 Write-Host "• Приложение: $MINIAPP_URL"
-Write-Host "• Вход: $LOGIN_URL"
 Write-Host ""
 Write-Host "🛠️ Техническая информация:" -ForegroundColor Yellow
 Write-Host "• Webhook: $WEBHOOK_URL"
@@ -205,4 +207,4 @@ Write-Host "• ✅ Домен $DOMAIN должен быть доступен и
 Write-Host "• ✅ Webhook должен отвечать HTTP 200"
 Write-Host "• ✅ Порт должен быть 80, 88, 443 или 8443"
 Write-Host ""
-Write-Host "🎉 Бот готов для работы с реальными пользователями!" -ForegroundColor Green
+Write-Host "🎉 Бот готов! Авторизация происходит автоматически!" -ForegroundColor Green

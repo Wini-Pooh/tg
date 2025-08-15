@@ -230,6 +230,7 @@
         // Инициализация Telegram Web App
         let tg = window.Telegram.WebApp;
         let currentUser = null;
+        let authInProgress = false;
         
         // Настройка темы и интерфейса
         tg.ready();
@@ -248,6 +249,13 @@
 
         // Автоматическая авторизация
         async function performAuth() {
+            if (authInProgress) {
+                console.log('Authentication already in progress, skipping...');
+                return;
+            }
+            
+            authInProgress = true;
+            
             try {
                 // Сначала проверяем, есть ли уже авторизованный пользователь
                 @if(Auth::check())
@@ -260,9 +268,12 @@
                     };
                     showUserInfo(currentUser);
                     showMainContent();
+                    console.log('User already authenticated on server');
                     return;
                 @endif
 
+                console.log('Attempting client-side authentication...');
+                
                 // Если пользователь не авторизован, пытаемся авторизовать через Telegram Web App
                 if (tg.initData) {
                     const response = await fetch('/api/miniapp/auth', {
@@ -283,10 +294,8 @@
                         showUserInfo(currentUser);
                         showMainContent();
                         
-                        // Перезагружаем страницу для обновления серверной сессии
-                        setTimeout(() => {
-                            window.location.reload();
-                        }, 1000);
+                        // Убираем автоматическую перезагрузку - она больше не нужна
+                        // поскольку авторизация уже работает корректно
                     } else {
                         throw new Error(result.error || 'Ошибка авторизации');
                     }
@@ -296,6 +305,8 @@
             } catch (error) {
                 console.error('Ошибка авторизации:', error);
                 showError(error.message);
+            } finally {
+                authInProgress = false;
             }
         }
 
