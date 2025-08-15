@@ -2,7 +2,7 @@
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
-use App\Http\Controllers\Api\TelegramWebhookController;
+use App\Http\Controllers\TelegramWebhookController;
 
 /*
 |--------------------------------------------------------------------------
@@ -18,6 +18,9 @@ use App\Http\Controllers\Api\TelegramWebhookController;
 Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
     return $request->user();
 });
+
+// Telegram Webhook для реальных пользователей
+Route::post('/telegram/webhook', [TelegramWebhookController::class, 'webhook']);
 
 // Telegram Webhook
 Route::post('/telegram/webhook', [TelegramWebhookController::class, 'handle']);
